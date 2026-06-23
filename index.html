@@ -146,12 +146,12 @@
   <div class="mgrid" id="metrics"></div>
 
   <hr class="hr">
-  <div class="slabel">Fixed bills &amp; savings — tap to mark as paid</div>
+  <div class="slabel">Fixed bills &amp; savings, tap to mark as paid</div>
   <div class="bills-grid" id="bills-grid"></div>
   <div class="bills-summary" id="bills-summary"></div>
 
   <hr class="hr">
-  <div class="slabel">Variable spending</div>
+  <div class="slabel">Spending — tracking only this month</div>
   <div class="cgrid" id="catgrid"></div>
 
   <hr class="hr">
@@ -175,14 +175,11 @@
   </div>
 
   <hr class="hr">
-  <div class="slabel">Variable spending vs budget</div>
-  <div style="position:relative;width:100%;height:200px;margin-bottom:.5rem">
-    <canvas id="chart" role="img" aria-label="Bar chart comparing variable spending to budget">Variable spending vs budget.</canvas>
+  <div class="slabel">Variable spending this month</div>
+  <div style="position:relative;width:100%;height:220px;margin-bottom:.5rem">
+    <canvas id="chart" role="img" aria-label="Bar chart of spending by category">Spending by category.</canvas>
   </div>
-  <div style="display:flex;gap:16px;font-size:12px;color:var(--text2);margin-bottom:1.5rem">
-    <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--green);display:inline-block"></span>Spent</span>
-    <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--bg3);border:0.5px solid var(--border2);display:inline-block"></span>Budget</span>
-  </div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:1.5rem">Budgets will appear once you set them next month.</div>
 
 </div>
 
@@ -204,7 +201,7 @@
   <div class="slabel">Travel fund progress</div>
   <div class="savings-bar">
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <div style="font-size:15px;font-weight:500">JustInvest — Cape Town trip 2027</div>
+      <div style="font-size:15px;font-weight:500">JustInvest: Cape Town trip 2027</div>
       <div id="sav-pct" style="font-size:13px;color:var(--text2)"></div>
     </div>
     <div class="savings-track"><div class="savings-fill" id="sav-fill"></div></div>
@@ -244,13 +241,16 @@ const BILLS = [
 ];
 const BILLS_TOTAL = BILLS.reduce((s, b) => s + b.amt, 0);
 
-// Variable spending categories
+// Variable spending categories — b:0 means tracking only this month, no hard limit set yet
 const VAR = [
-  { n: 'Groceries',     b: 4000 },
-  { n: 'Eating out',    b: 2000 },
-  { n: 'Hobbies',       b: 1000 },
-  { n: 'Electricity',   b: 1000 },
-  { n: 'Other',         b: 1000 },
+  { n: 'Groceries',            b: 0 },
+  { n: 'Eating out',           b: 0 },
+  { n: 'Hobbies',              b: 0 },
+  { n: 'Electricity',          b: 0 },
+  { n: 'Phone',                b: 0 },
+  { n: 'Uber',                 b: 0 },
+  { n: 'Medication/Toiletries',b: 0 },
+  { n: 'Other',                b: 0 },
 ];
 const VAR_TOTAL = VAR.reduce((s, c) => s + c.b, 0);
 
@@ -318,12 +318,12 @@ function renderMetrics() {
   const ti        = totIncome();
   const billsPaid = paidBillsTotal();
   const varSpent  = totVarSpent();
-  const leftVar   = VAR_TOTAL - varSpent;
+  const remaining = ti - billsPaid - varSpent;
   document.getElementById('metrics').innerHTML =
     `<div class="mc"><div class="ml">Monthly income</div><div class="mv ok">${fmt(ti)}</div></div>` +
     `<div class="mc"><div class="ml">Bills paid</div><div class="mv ${billsPaid===BILLS_TOTAL?'ok':'warn'}">${fmt(billsPaid)}</div></div>` +
-    `<div class="mc"><div class="ml">Variable spent</div><div class="mv ${varSpent>VAR_TOTAL?'bad':varSpent>VAR_TOTAL*0.85?'warn':''}">${fmt(varSpent)}</div></div>` +
-    `<div class="mc"><div class="ml">Left to spend</div><div class="mv ${leftVar<0?'bad':leftVar<500?'warn':'ok'}">${fmt(Math.max(0,leftVar))}</div></div>`;
+    `<div class="mc"><div class="ml">Variable spent</div><div class="mv">${fmt(varSpent)}</div></div>` +
+    `<div class="mc"><div class="ml">Unaccounted</div><div class="mv ${remaining<0?'bad':remaining<1000?'warn':'ok'}">${fmt(remaining)}</div></div>`;
 }
 
 function renderBills() {
@@ -343,12 +343,21 @@ function renderBills() {
 
   document.getElementById('bills-summary').innerHTML =
     `<div style="color:var(--text2)">${paidCount} of ${BILLS.length} paid</div>` +
-    `<div>${fmt(paidAmt)} <span>deducted</span> · ${fmt(BILLS_TOTAL - paidAmt)} remaining</div>`;
+    `<div>${fmt(paidAmt)} <span>deducted</span>, ${fmt(BILLS_TOTAL - paidAmt)} remaining</div>`;
 }
 
 function renderCats() {
   document.getElementById('catgrid').innerHTML = VAR.map(c => {
-    const s = spent(c.n), p = pct(s, c.b), left = c.b - s;
+    const s = spent(c.n);
+    if (c.b === 0) {
+      // Tracking only — no budget set yet
+      return `<div class="cc">
+        <div class="ch"><div class="cn">${c.n}</div><div class="ca" style="color:var(--text3);font-style:italic">tracking</div></div>
+        <div style="font-size:18px;font-weight:500;color:var(--text);margin:4px 0">${fmt(s)}</div>
+        <div style="font-size:11px;color:var(--text3)">No limit set yet</div>
+      </div>`;
+    }
+    const p = pct(s, c.b), left = c.b - s;
     return `<div class="cc">
       <div class="ch"><div class="cn">${c.n}</div><div class="ca">${fmt(s)} / ${fmt(c.b)}</div></div>
       <div class="pt"><div class="pf ${fc(p)}" style="width:${p}%"></div></div>
@@ -360,9 +369,10 @@ function renderCats() {
 function renderAlerts() {
   const alts = [];
   VAR.forEach(c => {
+    if (c.b === 0) return; // no limit set yet, skip alert
     const s = spent(c.n), p = pct(s, c.b);
     if (p >= 100) alts.push({t:'ad', m:`<strong>${c.n}</strong> is over budget by ${fmt(s - c.b)}.`});
-    else if (p >= 80) alts.push({t:'aw', m:`<strong>${c.n}</strong> is at ${p}% — ${fmt(c.b - s)} left.`});
+    else if (p >= 80) alts.push({t:'aw', m:`<strong>${c.n}</strong> is at ${p}% with ${fmt(c.b - s)} left.`});
   });
   const unpaid = BILLS.filter(b => !isBillPaid(b.id));
   if (unpaid.length) {
@@ -371,7 +381,7 @@ function renderAlerts() {
   const ar = document.getElementById('alerts');
   ar.innerHTML = alts.length
     ? alts.map(a => `<div class="abox ${a.t}">${a.t==='ad'?'⚠':'△'} <span>${a.m}</span></div>`).join('')
-    : `<div class="noalert">✓ No alerts — you are on track.</div>`;
+    : `<div class="noalert">✓ All good. No alerts this month.</div>`;
 }
 
 function renderList() {
@@ -397,20 +407,21 @@ function renderChart() {
   if (chartInst) chartInst.destroy();
   const isDark = window.matchMedia('(prefers-color-scheme:dark)').matches;
   const tc = isDark ? '#a8a79f' : '#5a5a55';
+  const hasBudgets = VAR.some(c => c.b > 0);
+  const datasets = [
+    { label:'Spent', data: VAR.map(c => spent(c.n)), backgroundColor:'#1D9E75', borderWidth:0 }
+  ];
+  if (hasBudgets) {
+    datasets.push({ label:'Budget', data: VAR.map(c => c.b), backgroundColor: isDark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.07)', borderWidth:0 });
+  }
   chartInst = new Chart(document.getElementById('chart'), {
     type: 'bar',
-    data: {
-      labels: VAR.map(c => c.n),
-      datasets: [
-        { label:'Spent',  data: VAR.map(c => spent(c.n)), backgroundColor:'#1D9E75', borderWidth:0 },
-        { label:'Budget', data: VAR.map(c => c.b), backgroundColor: isDark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.07)', borderWidth:0 }
-      ]
-    },
+    data: { labels: VAR.map(c => c.n), datasets },
     options: {
       responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{ display:false } },
       scales:{
-        x:{ ticks:{ autoSkip:false, font:{size:12}, color:tc }, grid:{ display:false } },
+        x:{ ticks:{ autoSkip:false, font:{size:11}, color:tc, maxRotation:30 }, grid:{ display:false } },
         y:{ ticks:{ callback:v=>'R'+Math.round(v/1000)+'k', font:{size:11}, color:tc }, grid:{ color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)' } }
       }
     }
@@ -429,7 +440,7 @@ function renderHistory() {
   document.getElementById('hist-list').innerHTML = periods.slice().reverse().map(p => {
     const ts = totVarSpent(p), rem = VAR_TOTAL - ts, over = ts > VAR_TOTAL;
     return `<div class="hist-row" onclick="toggleHist('${p}')">
-      <div><div class="hist-month">${monthName(p)}</div><div class="hist-meta">${fmt(ts)} variable spent · ${fmt(Math.abs(rem))} ${rem>=0?'remaining':'over'}</div></div>
+      <div><div class="hist-month">${monthName(p)}</div><div class="hist-meta">${fmt(ts)} variable spent, ${fmt(Math.abs(rem))} ${rem>=0?'remaining':'over'}</div></div>
       <div style="color:${over?'var(--red)':'var(--green)'};font-size:13px">${over?'Over':'Under'} budget</div>
     </div>
     <div class="hist-detail" id="hd-${p}">
@@ -473,7 +484,7 @@ function renderSavings() {
   const now = new Date(), target = new Date(2027, 5, 1);
   const mLeft = Math.max(1, (target.getFullYear()-now.getFullYear())*12 + target.getMonth() - now.getMonth());
   document.getElementById('sav-info').textContent = remaining > 0
-    ? `${fmt(remaining)} to go · ${mLeft} months until June 2027 · ${fmt(Math.ceil(remaining/mLeft))}/month needed`
+    ? `${fmt(remaining)} to go, ${mLeft} months until June 2027, ${fmt(Math.ceil(remaining/mLeft))}/month needed`
     : 'Goal reached! 🎉';
   if (savChartInst) savChartInst.destroy();
   if (months.length) {
